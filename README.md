@@ -8,12 +8,12 @@ This was part of the CS 548-12 course taught by Dr. Michael J. Reale at SUNY Pol
 
 Contributors: Ryan Primus
 
-In the code, I used a Pix2Pix implementation with PyTorch to translate satellite imagery to maps. Because it was based off Pix2Pix, I used a U-Net Generator and a binary CNN (Convolutional Neural Network) Discriminator for my model.
+In the code, I used a Pix2Pix implementation with PyTorch to translate satellite imagery to maps. Because it was based on Pix2Pix, I used a U-Net Generator and a binary CNN (Convolutional Neural Network) Discriminator for my model.
 
 ## Dataset
-Download the dataset from this Google Drive: [Maps Dataset](https://drive.google.com/file/d/1s5a2UeJR4H_KJ-nV4NmRMkBHr3zn20Tf/view)
+Download the 'map.tar.gz' dataset from UC Berkeley: [Maps Dataset](https://efrosgans.eecs.berkeley.edu/pix2pix/datasets/)
 
-Place this data directly into the folder you are working in to access the files.
+Place this data in the directory you are working in to access the files.
 
 ## Models
 Download the trained models from this Google Drive: [Trained Models](PUT THIS HERE)
@@ -22,13 +22,14 @@ Open the models in the folder you are working in.
 
 ## Software Dependencies
 Install [Miniconda](https://repo.anaconda.com/miniconda/) (specific to the device you are running the program on) to have access to all imports used.
+The model is built through PyTorch, which comes with Anaconda when installed. 
 
 ## Running the Project
 The primary files used in the project are:
 
-baseline_train.py -> this trains the model
+baseline_train.py -> trains the model
 
-baseline_eval.py -> this evaluates the model
+baseline_eval.py -> evaluates the model
 
 You only have to run baseline_eval if you downloaded the trained models listed before.
 
