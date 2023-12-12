@@ -16,9 +16,11 @@ Download the 'map.tar.gz' dataset from UC Berkeley: [Maps Dataset](https://efros
 Place this data in the directory you are working in to access the files.
 
 ## Models
-Download the trained models from this Google Drive: [Trained Models](PUT THIS HERE)
+Download the trained models from this Google Drive: [Trained Models](https://drive.google.com/drive/folders/1lNaF-nfsH0aMlowbMUi6byihr8Lc0q4V?usp=drive_link)
 
-Open the models in the folder you are working in.
+Download the weights from this Google Drive: [Weights](https://drive.google.com/file/d/1vvv2dXL98_M4SrjUgGps2vt1FzGRKH7B/view)
+
+Place the models/weights in the folder you have the repo copied to.
 
 ## Software Dependencies
 Install [Miniconda](https://repo.anaconda.com/miniconda/) (specific to the device you are running the program on) to have access to all imports used.
