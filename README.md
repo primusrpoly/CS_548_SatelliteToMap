@@ -16,7 +16,7 @@ Download the 'map.tar.gz' dataset from UC Berkeley: [Maps Dataset](https://efros
 Place this data in the directory you are working in to access the files.
 
 ## Models
-Download the trained models from this Google Drive: [Trained Models](https://drive.google.com/drive/folders/1lNaF-nfsH0aMlowbMUi6byihr8Lc0q4V?usp=drive_link)
+Download the trained models from this Google Drive: [Trained Models](https://drive.google.com/file/d/1UB6XYPrsvnhJW2pRqER9M9eXlV174vDI/view?usp=drive_link)
 
 Download the weights from this Google Drive: [Weights](https://drive.google.com/file/d/1vvv2dXL98_M4SrjUgGps2vt1FzGRKH7B/view)
 
