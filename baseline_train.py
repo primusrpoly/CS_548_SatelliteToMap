@@ -9,18 +9,22 @@ from torchvision import models, transforms, datasets
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
+from dataclasses import dataclass
 import time
 
-bs=1 # suggested by the paper
+# Paper Suggested Hyper-Parameters
+
+bs=1
 lr=0.0002 
 beta1=0.5
 beta2=0.999
-NUM_EPOCHS = 200
+NUM_EPOCHS = 100
 ngpu = 1
 L1_lambda = 100
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = ("cuda" if torch.cuda.is_available()
+              else "mps" if torch.backends.mps.is_available()
+              else "cpu")
 
 data_dir = "maps"
 
@@ -38,8 +42,8 @@ dataset_val = datasets.ImageFolder(root=os.path.join(data_dir, "val"), transform
 dataloader_train = torch.utils.data.DataLoader(dataset_train, batch_size=bs, shuffle=True, num_workers=0)
 dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=24, shuffle=True, num_workers=0)
 
-print("Training images: ", len(dataset_train))
-print("Testing images: ", len(dataset_val))
+print("# of Training images: ", len(dataset_train))
+print("# of Testing images: ", len(dataset_val))
 
 def show_image(img, title="No title", figsize=(5,5)):
     img = img.numpy().transpose(1,2,0)
@@ -55,14 +59,14 @@ def show_image(img, title="No title", figsize=(5,5)):
     
 images,_ = next(iter(dataloader_train))
 
-sample_sat = images[0][:,:,:256]
-sample_map = images[0][:,:,256:]
+example_sat = images[0][:,:,:256]
+example_map = images[0][:,:,256:]
 
 show_image(images[0], title="Satellite and Map Image", figsize=(8,8))
 
-show_image(img = sample_sat, title="Satellite Image", figsize=(5,5))
+show_image(img = example_sat, title="Satellite Image", figsize=(5,5))
 
-show_image(img = sample_map, title="Map Image", figsize=(5, 5))
+show_image(img = example_map, title="Map Image", figsize=(5, 5))
 
 images,_ = next(iter(dataloader_train))
 x = torchvision.utils.make_grid(images[:,:,:,:256], padding=10)
@@ -72,40 +76,18 @@ def weights_init(m):
     name = m.__class__.__name__
     
     if(name.find("Conv") > -1):
-        nn.init.normal_(m.weight.data, 0.0, 0.02) # ~N(mean=0.0, std=0.02)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif(name.find("BatchNorm") > -1):
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0.0)
-
-"""
-    The Generator is a U-Net 256 with skip connections between Encoder and Decoder
-"""
 
 class Generator(nn.Module):
     def __init__(self, ngpu):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         
-        """
-        ===== Encoder ======
-        
-        * Encoder has the following architecture:
-        0) Inp3 
-        1) C64 
-        2) Leaky, C128, Norm 
-        3) Leaky, C256, Norm 
-        4) Leaky, C512, Norm 
-        5) Leaky, C512, Norm 
-        6) Leaky, C512, Norm 
-        7) Leaky, C512
-        
-        * The structure of 1 encoder block is:
-        1) LeakyReLU(prev layer)
-        2) Conv2D
-        3) BatchNorm
-        
-        Where Conv2D has kernel_size-4, stride=2, padding=1 for all layers
-        """
+      # Encoder Structure
+      
         self.encoder1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False)
         
         self.encoder2 = nn.Sequential(
@@ -143,28 +125,9 @@ class Generator(nn.Module):
             nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1, bias=False)
         )
         
-        """
-        ===== Decoder =====
-        * Decoder has the following architecture:
-        1) ReLU(from latent space), DC512, Norm, Drop 0.5 - Residual
-        2) ReLU, DC512, Norm, Drop 0.5, Residual
-        3) ReLU, DC512, Norm, Drop 0.5, Residual
-        4) ReLU, DC256, Norm, Residual
-        5) ReLU, DC128, Norm, Residual
-        6) ReLU, DC64, Norm, Residual
-        7) ReLU, DC3, Tanh()
         
-        * Note: only apply Dropout in the first 3 Decoder layers
+        # Decoder Structure
         
-        * The structure of each Decoder block is:
-        1) ReLU(from prev layer)
-        2) ConvTranspose2D
-        3) BatchNorm
-        4) Dropout
-        5) Skip connection
-        
-        Where ConvTranpose2D has kernel_size=4, stride=2, padding=1
-        """
         self.decoder1 = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1, bias=False),
@@ -179,7 +142,6 @@ class Generator(nn.Module):
             nn.BatchNorm2d(512),
             nn.Dropout(0.5)
         )
-        # skip connection in forward()
         
         self.decoder3 = nn.Sequential(
             nn.ReLU(inplace=True),
@@ -187,27 +149,23 @@ class Generator(nn.Module):
             nn.BatchNorm2d(512),
             nn.Dropout(0.5)
         )
-        # skip connection in forward()
         
         self.decoder4 = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(in_channels=512*2, out_channels=256, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(256),
-            #nn.Dropout(0.5)
         )
         
         self.decoder5 = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(in_channels=256*2, out_channels=128, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(128),
-            #nn.Dropout(0.5)
         )
         
         self.decoder6 = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(in_channels=128*2, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(64),
-            #nn.Dropout(0.5)
         )
         
         self.decoder7 = nn.Sequential(
@@ -252,6 +210,8 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         self.ngpu = ngpu
         
+        # Discriminator Structure
+
         self.structure = nn.Sequential(
             nn.Conv2d(in_channels=3*2, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
@@ -294,57 +254,57 @@ print(criterion(out1, out2))
 optimizerD = optim.Adam(model_D.parameters(), lr=lr, betas=(beta1, beta2))
 optimizerG = optim.Adam(model_G.parameters(), lr=lr, betas=(beta1, beta2))
 
-NUM_EPOCHS=171
+NUM_EPOCHS = 100
 model_D.to(device)
 model_G.to(device)
 print()
 
 
 L1_lambda = 100
-NUM_EPOCHS= 50
+NUM_EPOCHS = 100
 
 for epoch in range(NUM_EPOCHS+1):
     start = time.time()
     
-    print(f"Training epoch {epoch+1}")
+    print(f"Training epoch {epoch+1}/{NUM_EPOCHS+1}")
+    
+    # Satellite to Map Training
     
     for images,_ in iter(dataloader_train):
-        # ========= Train Discriminator ===========
-        # Train on real data
-        # Maximize log(D(x,y)) <- maximize D(x,y)
+        
+        # Discriminator Training
+     
         model_D.zero_grad()
         
-        inputs = images[:,:,:,:256].to(device) # input image data
-        targets = images[:,:,:,256:].to(device) # real targets data
+        inputs = images[:,:,:,:256].to(device) # satellite input image data
+        targets = images[:,:,:,256:].to(device) # maps targets data
         
         real_data = torch.cat([inputs, targets], dim=1).to(device)
-        outputs = model_D(real_data) # label "real" data
+        outputs = model_D(real_data) 
         labels = torch.ones(size = outputs.shape, dtype=torch.float, device=device)
         
-        lossD_real = 0.5 * criterion(outputs, labels) # divide the objective by 2 -> slow down D
+        lossD_real = 0.5 * criterion(outputs, labels)
         lossD_real.backward()
         
-        # Train on fake data
-        # Maximize log(1-D(x,G(x))) <- minimize D(x,G(x))
         gens = model_G(inputs).detach()
-         
-        fake_data = torch.cat([inputs, gens], dim=1) # generated image data
-        outputs = model_D(fake_data)
-        labels = torch.zeros(size = outputs.shape, dtype=torch.float, device=device) # label "fake" data
         
-        lossD_fake = 0.5 * criterion(outputs, labels) # divide the objective by 2 -> slow down D
+        fake_data = torch.cat([inputs, gens], dim=1)
+        outputs = model_D(fake_data)
+        labels = torch.zeros(size = outputs.shape, dtype=torch.float, device=device) 
+        
+        lossD_fake = 0.5 * criterion(outputs, labels) 
         lossD_fake.backward()
         
         optimizerD.step()
         
-        # ========= Train Generator x2 times ============
-        # maximize log(D(x, G(x)))
+        # Generator Training
+        
         for i in range(2):
             model_G.zero_grad()
             
             gens = model_G(inputs)
             
-            gen_data = torch.cat([inputs, gens], dim=1) # concatenated generated data
+            gen_data = torch.cat([inputs, gens], dim=1)
             outputs = model_D(gen_data)
             labels = torch.ones(size = outputs.shape, dtype=torch.float, device=device)
             
@@ -352,25 +312,103 @@ for epoch in range(NUM_EPOCHS+1):
             lossG.backward()
             optimizerG.step()
             
-    print("Time taken for epoch {} is {} sec\n".format(epoch + 1,
-                                                   time.time()-start))
+    print("Time taken for Sat2Map epoch {} is {} sec\n".format(epoch + 1,
+                                                time.time()-start))
             
     if(epoch%5==0):
-        torch.save(model_G, "./sat2mapGen_v1.3.pth")
-        torch.save(model_D, "./sat2mapDisc_v1.3.pth")
+        torch.save(model_G, "./Sat2MapGen_v1.5.pth")
+        torch.save(model_D, "./Sat2MapDisc_v1.5.pth")
+       
+    # Map to Satellite Trainig   
+        
+    for images,_ in iter(dataloader_train):
+        
+        # Discriminator Training
+       
+        model_D.zero_grad()
+      
+        inputs = images[:,:,:,256:].to(device) # maps input image data
+        targets = images[:,:,:,:256].to(device) # satellite targets data
+        
+        real_data = torch.cat([inputs, targets], dim=1).to(device)
+        outputs = model_D(real_data)
+        labels = torch.ones(size = outputs.shape, dtype=torch.float, device=device)
+        
+        lossD_real = 0.5 * criterion(outputs, labels) 
+        lossD_real.backward()
+        
+        gens = model_G(inputs).detach()
+        
+        fake_data = torch.cat([inputs, gens], dim=1)
+        outputs = model_D(fake_data)
+        labels = torch.zeros(size = outputs.shape, dtype=torch.float, device=device)
+        
+        lossD_fake = 0.5 * criterion(outputs, labels)
+        lossD_fake.backward()
+        
+        optimizerD.step()
+        
+        # Generator Training
+        
+        for i in range(2):
+            model_G.zero_grad()
+            
+            gens = model_G(inputs)
+            
+            gen_data = torch.cat([inputs, gens], dim=1)
+            outputs = model_D(gen_data)
+            labels = torch.ones(size = outputs.shape, dtype=torch.float, device=device)
+            
+            lossG = criterion(outputs, labels) + L1_lambda * torch.abs(gens-targets).sum()
+            lossG.backward()
+            optimizerG.step()
+            
+    print("Time taken for Map2Sat epoch {} is {} sec\n".format(epoch + 1,
+                                                time.time()-start))
+            
+    if(epoch%5==0):
+        torch.save(model_G, "./Map2SatGen_v1.5.pth")
+        torch.save(model_D, "./Map2SatDisc_v1.5.pth")
     
 print("Done!")
+
+# Saving Results
 
 test_imgs,_ = next(iter(dataloader_val))
 
 satellite = test_imgs[:,:,:,:256].to(device)
 maps = test_imgs[:,:,:,256:].to(device)
 
-gen = model_G(satellite)
+result_sat = test_imgs[0][:,:,:256]
+result_map = test_imgs[0][:,:,256:]
+
+gen_map = model_G(satellite)
+gen_sat = model_G(maps)
 
 satellite = satellite.detach().cpu()
-gen = gen.detach().cpu()
 maps = maps.detach().cpu()
+gen_map = gen_map.detach().cpu()
+gen_sat = gen_sat.detach().cpu()
+
+# Printing Results
+
+show_image(test_imgs[0], title="Satellite and Generated Map Image", figsize=(8,8))
+
+show_image(img = result_sat, title="Satellite Image", figsize=(5,5))
+
+show_image(img = result_map, title="Map Image", figsize=(5, 5))
+
+show_image(test_imgs[0], title="Map and Generated Satellite Image", figsize=(8,8))
+
+show_image(img = result_map, title="Map Image", figsize=(5, 5))
+
+show_image(img = result_sat, title="Satellite Image", figsize=(5,5))
+        
 
 show_image(torchvision.utils.make_grid(satellite, padding=10), title="Satellite", figsize=(50,50))
-show_image(torchvision.utils.make_grid(gen, padding=10), title="Generated", figsize=(50,50))
+show_image(torchvision.utils.make_grid(gen_map, padding=10), title="Generated Map Images", figsize=(50,50))
+
+show_image(torchvision.utils.make_grid(maps, padding=10), title="Maps", figsize=(50,50))
+show_image(torchvision.utils.make_grid(gen_sat, padding=10), title="Generated Satellite Images", figsize=(50,50))
+
+
