@@ -261,7 +261,7 @@ print()
 
 
 L1_lambda = 100
-NUM_EPOCHS = 100
+NUM_EPOCHS = 2 #100
 
 for epoch in range(NUM_EPOCHS+1):
     start = time.time()
