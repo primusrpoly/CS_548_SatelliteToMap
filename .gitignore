@@ -1,1 +1,6 @@
 Sat2MapModels/
+maps/
+*.pth
+*.zip
+*.gz
+__pycache__/
